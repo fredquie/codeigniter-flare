@@ -17,6 +17,68 @@ class Flare {
 	
 	static $db;
 	
+	public $new_record 			= TRUE;
+	public $current_primary_key = 'id';
+	
+	protected $attributes 		= array();
+	protected $dirty_attributes = array();
+	
+	public function __construct($attributes = null, $new_record = TRUE) {
+		$this->new_record = $new_record;
+		
+		if (isset($attributes)) {
+			foreach ((array)$attributes as $name => $value) {
+				$this->attributes[$name] = $value;
+			}
+		}
+	}
+	
+	public function __get($attr) {
+		if (in_array($attr, array_keys($this->attributes))) {
+			return $this->attributes[$attr];
+		}
+	}
+	
+	public function __set($attr, $value) {
+		$this->attributes[$attr] = $value;
+		$this->dirty_attributes[] = $attr;
+	}
+	
+	public function save() {
+		// handle timestamps
+		if (in_array('created_at', array_keys($this->attributes)) && $this->new_record) {
+			$this->attributes['created_at'] = date('Y-m-d H:i:s');
+		}
+		
+		if (in_array('updated_at', array_keys($this->attributes))) {
+			$this->attributes['updated_at'] = date('Y-m-d H:i:s');
+		}
+		
+		// what attributes are we to change, good sir?
+		foreach ($this->dirty_attributes as $attr) {
+			self::$db->set($attr, $this->attributes[$attr]);
+		}
+		
+		if (!$this->new_record) {
+			self::$db->where(self::$primary_key, $this->attributes[self::$primary_key]);
+		}
+		
+		$verdict = self::$db->update($this->_table());
+		
+		if ($verdict) {
+			$this->dirty_attributes = array();
+			$this->new_record       = FALSE;
+			
+			return TRUE;
+		} else {
+			return FALSE;
+		}
+	}
+	
+	public function _table() {
+		return pluralize(strtolower(get_class($this)));
+	}
+	
 	public static function find() {
 		$class = get_called_class();
 		
@@ -33,12 +95,14 @@ class Flare {
 			switch ($args[0]) {
 				case 'all':
 					$result = self::call_codeigniter_methods($options)
-									->get(self::$table);
+									->get(self::$table)
+									->result();
 					break;
 					
 				case 'first':
 					$result = self::call_codeigniter_methods($options)
-									->get(self::$table, 1);
+									->get(self::$table, 1)
+									->row();
 					break;
 					
 				case 'last':
@@ -50,7 +114,8 @@ class Flare {
 		} else {
 			if (is_array($args[0])) {
 				$result = self::call_codeigniter_methods($options)
-								->get(self::$table);
+								->get(self::$table)
+								->result();
 			} elseif (is_integer($args[0])) {
 				$result = self::call_codeigniter_methods(array('conditions' => array(self::$primary_key => $args[0])))
 								->get(self::$table)
@@ -151,6 +216,21 @@ class Flare {
 		
 		/* And return the DB object! */
 		return self::$db;
+	}
+	
+	public static function parse_result($result) {
+		$return = null;
+		$class  = get_called_class();
+		
+		if (is_array($result)) {
+			foreach ($result as $object) {
+				$return[] = new $class($object, FALSE);
+			}
+		} else {
+			$return = new $class($result, FALSE);
+		}
+		
+		return $return;
 	}
 	
 }
