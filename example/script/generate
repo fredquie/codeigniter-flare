@@ -1,0 +1,34 @@
+#!/Applications/MAMP/bin/php5/bin/php
+<?php
+/**
+ * Ignition - a selection of command-line
+ * scripts and application development helpers
+ * for PHP or CodeIgniter applications.
+ *
+ * @package ignition
+ * @author Jamie Rumbelow
+ */
+
+ob_start();
+	require_once dirname(__FILE__) . '/../index.php';
+	require_once dirname(__FILE__) . '/lib/core.php';
+	require_once dirname(__FILE__) . '/lib/generator.php';
+ob_end_clean();
+
+$CI	=& get_instance();
+$IG = new IgnitionGenerator(&$CI);
+
+if (isset($_SERVER['argv'][1])) {
+	$action = $_SERVER['argv'][1];
+	
+	switch ($action) {
+		case 'controller': 	$IG->run('controller'); 	break;
+		case 'model': 			$IG->run('model'); 				break;
+		case 'migration': 	$IG->run('migration'); 		break;
+		case 'help': 				$IG->help(); 	 						break;
+		
+		default: 						$IG->help(); 	 						break;
+	}
+} else {
+	$IG->help();
+}
