@@ -18,7 +18,6 @@ class Flare {
 	static $db;
 	
 	public $new_record 			= TRUE;
-	public $current_primary_key = 'id';
 	
 	protected $attributes 		= array();
 	protected $dirty_attributes = array();
@@ -79,18 +78,50 @@ class Flare {
 		return pluralize(strtolower(get_class($this)));
 	}
 	
-	public static function find() {
-		$class = get_called_class();
+	public function __tostring() {
+		return (method_exists($this, 'to_param')) ? $this->to_param() : $this->attributes[self::$primary_key];
+	}
+	
+	public function update($data) {
+		return self::$db->where(self::$primary_key, $this->attributes[self::$primary_key])
+						->update(self::$table, $data);
+	}
+	
+	public static function delete() {
+		$args = func_get_args();
 		
+		if (is_array($args[0])) {
+			$options = $args[0];
+		} else {
+			$options = array('conditions' => array(self::$primary_key => $args[0]));
+		}
+		
+		return self::call_codeigniter_methods($options)
+					 ->delete(self::$table);
+	}
+	
+	public static function create($data) {
+						   get_instance()->load->database();
+		self::$db 		=& get_instance()->db;
+		self::$table 	=  self::table();
+		
+		self::$db->insert(self::$table, $data);
+		$id = self::$db->insert_id();
+		
+		return self::find($id);
+	}
+	
+	public static function find() {	
+		$class = get_called_class();
+	
 		if (func_num_args() <= 0) {
 			throw new RecordNotFound("Couldn't find $class without an ID");
 			return;
 		}
-		
+	
 		$args 	  = func_get_args();
 		$options  = (isset($args[1])) ? $args[1] : array();
-		$num_args = count($args);
-		
+	
 		if ($args[0] == 'all' || $args[0] == 'first' || $args[0] == 'last') {
 			switch ($args[0]) {
 				case 'all':
@@ -98,13 +129,13 @@ class Flare {
 									->get(self::$table)
 									->result();
 					break;
-					
+				
 				case 'first':
 					$result = self::call_codeigniter_methods($options)
 									->get(self::$table, 1)
 									->row();
 					break;
-					
+				
 				case 'last':
 					$result = self::call_codeigniter_methods($options)
 									->get(self::$table)
@@ -116,13 +147,13 @@ class Flare {
 				$result = self::call_codeigniter_methods($options)
 								->get(self::$table)
 								->result();
-			} elseif (is_integer($args[0])) {
+			} elseif (is_integer($args[0]) || is_string($args[0])) {
 				$result = self::call_codeigniter_methods(array('conditions' => array(self::$primary_key => $args[0])))
 								->get(self::$table)
 								->row();
 			}
 		}
-							
+						
 		return self::parse_result($result);
 	}
 	
@@ -146,14 +177,15 @@ class Flare {
 	 * Translate the options hash into CodeIgniter ActiveRecord
 	 * functions. Returns the CI DB object.
 	 *
-	 * @param string $options The options hash 
+	 * @param string $options The options hash
+	 * @param boolean $local Are we calling it statically? 
 	 * @return object
 	 * @author Jamie Rumbelow
 	 */
-	public static function call_codeigniter_methods($options) {
+	public static function call_codeigniter_methods($options, $local = FALSE) {
 						   get_instance()->load->database();
 		self::$db 		=& get_instance()->db;
-		self::$table 	=  self::table();
+		self::$table 	=  ($local) ? $this->_table() : self::table();
 		
 		/* WHERE clause */
 		if (isset($options['conditions'])) {
@@ -228,6 +260,24 @@ class Flare {
 			}
 		} else {
 			$return = new $class($result, FALSE);
+		}
+		
+		return $return;
+	}
+	
+	public function parse_result_locally($result) {
+		$return = null;
+		$class  = get_class($this);
+		
+		if (is_array($result)) {
+			foreach ($result as $object) {
+				$return[] = new $class($object, FALSE);
+			}
+		} else {
+			foreach ($result as $key => $value) {
+				$this->attributes[$key] = $value;
+				$this->new_record = FALSE;
+			}
 		}
 		
 		return $return;
